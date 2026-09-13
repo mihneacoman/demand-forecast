@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(ruff check *)",
+      "Bash(black *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(docker compose ps)",
+      "Bash(docker compose logs *)",
+      "Bash(mlflow experiments list)",
+      "Bash(mlflow runs list *)"
+    ],
+    "deny": [
+      "Read(./data/**)",
+      "Read(./mlruns/**)"
+    ]
+  }
+}
