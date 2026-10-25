@@ -23,7 +23,7 @@ docker compose up -d          # MLflow server + Postgres + MinIO
 ```bash
 uv run pytest                       # unit + integration tests
 uv run ruff check . && uv run black .   # lint + format
-uv run python -m src.data.build_features   # feature pipeline, CLI-callable
+uv run python -m demand_forecast.data.build_features   # feature pipeline, CLI-callable
 uv run mlflow ui                    # inspect runs locally
 ```
 
@@ -38,7 +38,7 @@ uv run mlflow ui                    # inspect runs locally
   the rest). Never a random split.
 - Rolling/lag features must reference only past data — check for leakage
   before merging any new feature.
-- Feature engineering lives in `src/data/`, must be scriptable/CLI-callable,
+- Feature engineering lives in `src/demand_forecast/data/`, must be scriptable/CLI-callable,
   never notebook-only. Notebooks are for exploration only.
 - Standard metrics for every model: **WAPE, MASE, RMSSE** (+ pinball loss for
   quantile models). Every new model is compared against the baseline tier in
