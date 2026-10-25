@@ -44,7 +44,11 @@ def download(raw_dir: Path = RAW_DIR, force: bool = False) -> None:
 
     api = KaggleApi()
     api.authenticate()
-    api.competition_download_files(COMPETITION, path=str(raw_dir), quiet=False)
+    # Always re-download: invalid_files() already decided it is needed, and
+    # Kaggle's own freshness check would reuse a partial zip from a failed run.
+    api.competition_download_files(
+        COMPETITION, path=str(raw_dir), force=True, quiet=False
+    )
 
     archive = raw_dir / f"{COMPETITION}.zip"
     with zipfile.ZipFile(archive) as zf:
@@ -54,7 +58,7 @@ def download(raw_dir: Path = RAW_DIR, force: bool = False) -> None:
 
     bad = invalid_files(raw_dir)
     if bad:
-        raise SystemExit(f"Checksum mismatch after download: {', '.join(bad)}")
+        raise RuntimeError(f"Checksum mismatch after download: {', '.join(bad)}")
     print(f"M5 data downloaded and verified in {raw_dir}")
 
 
