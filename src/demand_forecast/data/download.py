@@ -1,5 +1,6 @@
 """Download the M5 dataset from Kaggle into data/raw/."""
 
+import argparse
 import hashlib
 import zipfile
 from pathlib import Path
@@ -57,5 +58,25 @@ def download(raw_dir: Path = RAW_DIR, force: bool = False) -> None:
     print(f"M5 data downloaded and verified in {raw_dir}")
 
 
+def main(argv: list[str] | None = None) -> None:
+    """Command-line entry point."""
+    parser = argparse.ArgumentParser(
+        description="Download and verify the M5 dataset from Kaggle."
+    )
+    parser.add_argument(
+        "--raw-dir",
+        type=Path,
+        default=RAW_DIR,
+        help=f"directory for the raw CSV files (default: {RAW_DIR})",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="re-download even if the files are present and valid",
+    )
+    args = parser.parse_args(argv)
+    download(args.raw_dir, force=args.force)
+
+
 if __name__ == "__main__":
-    download()
+    main()
