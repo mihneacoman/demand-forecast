@@ -1,7 +1,7 @@
 [project]
 name = "demand-forecast"
 version = "0.1.0"
-description = "Add your description here"
+description = "Explainable demand forecasting on the M5 Walmart dataset, with MLflow tracking and FastAPI serving"
 authors = [
     { name = "mihneacoman", email = "166476138+mihneacoman@users.noreply.github.com" }
 ]
