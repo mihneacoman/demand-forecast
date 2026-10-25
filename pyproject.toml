@@ -29,7 +29,6 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "black>=26.5.1",
-    "isort>=9.0.1",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
@@ -40,3 +39,6 @@ dev = [
 python_version = "3.12"
 disallow_untyped_defs = true
 ignore_missing_imports = true
+
+[tool.ruff.lint]
+extend-select = ["I"]

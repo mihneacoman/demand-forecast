@@ -55,7 +55,7 @@ Promote via Model Registry stage transitions (Staging → Production), not by
 naming convention alone.
 
 ## Code Standards
-- black, ruff, isort, mypy — enforced via pre-commit; don't bypass with
+- black, ruff (incl. import sorting), mypy — enforced via pre-commit; don't bypass with
   `--no-verify`.
 - Type hints on all public functions in `src/`.
 - No secrets or credentials in code or committed configs — use `.env`
