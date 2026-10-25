@@ -15,8 +15,8 @@
       "Bash(mlflow runs list *)"
     ],
     "deny": [
-      "Read(./data/**)",
-      "Read(./mlruns/**)"
+      "Read(/data/**)",
+      "Read(/mlruns/**)"
     ]
   }
 }
