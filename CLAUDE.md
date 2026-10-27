@@ -1,9 +1,9 @@
 # CLAUDE.md
 
 ## Project
-Demand forecasting on the M5 (Walmart) dataset. Pipeline: data validation →
-feature engineering → LightGBM (+ TFT stretch) → SHAP explainability →
-MLflow tracking/registry → FastAPI serving.
+Demand forecasting on the M5 (Walmart) dataset. Pipeline: data download
+(SHA256-verified) → EDA → feature engineering → LightGBM (+ TFT stretch) →
+SHAP explainability → MLflow tracking/registry → FastAPI serving.
 
 ## Environment
 Dependencies are managed with `uv`. Never use `pip install` directly.
@@ -40,6 +40,10 @@ uv run mlflow ui                    # inspect runs locally
   before merging any new feature.
 - Feature engineering lives in `src/demand_forecast/data/`, must be scriptable/CLI-callable,
   never notebook-only. Notebooks are for exploration only.
+- No validation layer on the raw M5 files — they are static and verified by
+  SHA256 on download. Put data checks after our own transforms instead: plain
+  asserts in the pipeline + pytest tests (row/key invariants, leakage). Don't
+  add a schema library (pandera etc.) without a concrete need.
 - Standard metrics for every model: **WAPE, MASE, RMSSE** (+ pinball loss for
   quantile models). Every new model is compared against the baseline tier in
   the same MLflow parent run.

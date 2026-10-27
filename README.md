@@ -39,5 +39,5 @@ files are present and valid; use `--force` to re-download.
 
 ## Status
 
-🚧 Work in progress. Project infrastructure is set up; data validation
-and exploration come next.
+🚧 Work in progress. Project infrastructure and the data download are
+in place; exploratory data analysis comes next.
