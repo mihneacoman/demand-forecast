@@ -15,8 +15,20 @@ trustworthy and production-ready:
   versions, metrics, and a model registry for promotion to production.
 - **Serves** forecasts through an API.
 
-Modeling choices will be made experimentally once the data and feature
-pipeline are in place.
+## What the data says
+
+An [exploratory analysis](docs/eda.md) shaped the modeling choices:
+
+- **Most demand is intermittent.** 60% of days with the item on the shelf
+  have zero sales, and 73% of series sell on only a few days. Hence
+  scale-free metrics (WAPE, MASE, RMSSE; no MAPE) and a Tweedie objective.
+- **Many zeros are not demand.** 64% of series launch after the data starts;
+  their pre-launch days are 31% of all zeros and are excluded.
+- **Calendar effects are strong and specific.** Weekends sell 12% to 26%
+  above the weekly mean, and food assistance (SNAP) days lift food sales by
+  6% to 20% beyond the start-of-month effect.
+- **Holidays shift demand rather than add to it.** Sales drop on the day
+  itself and rise one or two days before.
 
 ## Getting the data
 
@@ -39,5 +51,5 @@ files are present and valid; use `--force` to re-download.
 
 ## Status
 
-🚧 Work in progress. Project infrastructure and the data download are
-in place; exploratory data analysis comes next.
+🚧 Work in progress. Project infrastructure, the data download and the
+exploratory analysis are in place; the feature pipeline comes next.
