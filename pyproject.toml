@@ -10,6 +10,7 @@ dependencies = [
     "fastapi>=0.141.1",
     "kaggle>=2.2.5",
     "lightgbm>=4.7.0",
+    "matplotlib>=3.11.2",
     "mlflow>=3.16.0",
     "numpy>=2.5.3",
     "pandas>=3.0.5",
@@ -29,7 +30,9 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "black>=26.5.1",
+    "ipykernel>=7.4.0",
     "mypy>=2.3.1",
+    "nbconvert>=7.17.2",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "ruff>=0.16.7",
