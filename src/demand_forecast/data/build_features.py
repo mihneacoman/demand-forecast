@@ -33,6 +33,8 @@ LAGS = [28, 35, 42, 56]
 ROLLING_WINDOWS = [7, 28, 91]
 # The EDA finds shopping moves at most a few days ahead of an event.
 MAX_DAYS_TO_EVENT = 7
+# A year: long enough to outlast a discount, short enough to follow the usual price.
+PRICE_WINDOW_WEEKS = 52
 COMPLETE_FEATURES = ["days_until_event", "day_of_week", "day_of_month", "month", "snap"]
 
 
@@ -99,6 +101,24 @@ def build_base_table(raw: RawData) -> pd.DataFrame:
     base = drop_pre_launch(add_prices(long, raw.prices))
     check_base_table(base, n_series=len(raw.sales))
     return base
+
+
+def add_price_features(
+    table: pd.DataFrame, window_weeks: int = PRICE_WINDOW_WEEKS
+) -> pd.DataFrame:
+    """Add each week's price relative to the series' recent median and last week."""
+    # Prices are weekly, so work on one row per week and copy back to the days.
+    weekly = table.drop_duplicates(["id", "wm_yr_wk"])[["id", "wm_yr_wk", "sell_price"]]
+    prices = weekly.groupby("id")["sell_price"]
+    median = prices.rolling(window_weeks, min_periods=1).median()
+    median = median.reset_index(level="id", drop=True)
+    weekly = weekly.assign(
+        price_to_median=(weekly["sell_price"] / median).astype("float32"),
+        price_change=(weekly["sell_price"] / prices.shift(1)).astype("float32"),
+    ).drop(columns="sell_price")
+    return table.merge(
+        weekly, on=["id", "wm_yr_wk"], how="left", validate="many_to_one"
+    )
 
 
 def is_christmas(dates: pd.Series) -> pd.Series:

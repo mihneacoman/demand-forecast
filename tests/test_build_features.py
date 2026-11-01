@@ -11,6 +11,7 @@ from demand_forecast.data.build_features import (
     add_days_since_sale,
     add_lags,
     add_next_event,
+    add_price_features,
     add_prices,
     add_rolling_stats,
     add_sales_history,
@@ -486,3 +487,20 @@ def test_broken_feature_table_fails_its_checks(
     features = build_feature_table(*make_feature_inputs())
     with pytest.raises(AssertionError, match=message):
         check_feature_table(corrupt(features), n_series=2)
+
+
+def test_price_features_stay_within_each_series_and_use_past_weeks_only() -> None:
+    # The first two rows are days of the same week.
+    table = pd.DataFrame(
+        {
+            "id": ["A", "A", "A", "A", "A", "B", "B"],
+            "wm_yr_wk": [11101, 11101, 11102, 11103, 11104, 11101, 11102],
+            "sell_price": [2, 2, 4, 1, 5, 10, 10],
+        }
+    ).astype({"id": "category", "wm_yr_wk": "int16", "sell_price": "float32"})
+
+    expected = table.assign(
+        price_to_median=pd.array([1, 1, 4 / 3, 0.5, 1.25, 1, 1], dtype="float32"),
+        price_change=pd.array([None, None, 2, 0.25, 5, None, 1], dtype="float32"),
+    )
+    pd.testing.assert_frame_equal(add_price_features(table, window_weeks=3), expected)
