@@ -26,6 +26,8 @@ PRICE_KEYS = ["store_id", "item_id", "wm_yr_wk"]
 # Multiples of 7, from the forecast horizon up: shorter lags are unknown for the
 # later forecast days, and other lengths would compare different weekdays.
 LAGS = [28, 35, 42, 56]
+# Multiples of 7, so each weekday counts the same in every window.
+ROLLING_WINDOWS = [7, 28, 91]
 
 
 def to_long(sales: pd.DataFrame) -> pd.DataFrame:
@@ -101,6 +103,21 @@ def add_lags(table: pd.DataFrame, lags: Sequence[int] = LAGS) -> pd.DataFrame:
     """Add each series' sales from earlier days, by row within the series."""
     history = table.groupby("id")["sales_history"]
     return table.assign(**{f"sales_lag_{lag}": history.shift(lag) for lag in lags})
+
+
+def add_rolling_stats(
+    table: pd.DataFrame, windows: Sequence[int] = ROLLING_WINDOWS
+) -> pd.DataFrame:
+    """Add the mean and std of each series' sales over windows ending at lag 28."""
+    columns = {}
+    for window in windows:
+        # Half a window is enough, so Christmas does not blank every window it is in.
+        min_periods = (window + 1) // 2
+        rolling = table.groupby("id")["sales_lag_28"].rolling(window, min_periods)
+        for name, stat in (("mean", rolling.mean()), ("std", rolling.std())):
+            stat = stat.reset_index(level="id", drop=True).astype("float32")
+            columns[f"sales_{name}_{window}"] = stat
+    return table.assign(**columns)
 
 
 def main(argv: list[str] | None = None) -> None:

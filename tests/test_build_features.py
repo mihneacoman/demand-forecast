@@ -7,6 +7,7 @@ from demand_forecast.data.build_features import (
     add_calendar,
     add_lags,
     add_prices,
+    add_rolling_stats,
     add_sales_history,
     build_base_table,
     check_base_table,
@@ -314,3 +315,21 @@ def test_lags_stay_within_each_series_and_carry_missing_days() -> None:
         sales_lag_2=pd.array([None, None, 1, 2, None, None], dtype="float32"),
     )
     pd.testing.assert_frame_equal(add_lags(table, lags=[1, 2]), expected)
+
+
+def test_rolling_stats_stay_within_each_series_and_skip_missing_days() -> None:
+    table = pd.DataFrame(
+        {
+            "id": ["A", "A", "A", "A", "A", "B", "B"],
+            "sales_lag_28": [None, 1, 3, None, 5, 2, 4],
+        }
+    ).astype({"id": "category", "sales_lag_28": "float32"})
+
+    spread = 2**0.5
+    expected = table.assign(
+        sales_mean_3=pd.array([None, None, 2, 2, 4, None, 3], dtype="float32"),
+        sales_std_3=pd.array(
+            [None, None, spread, spread, spread, None, spread], dtype="float32"
+        ),
+    )
+    pd.testing.assert_frame_equal(add_rolling_stats(table, windows=[3]), expected)
