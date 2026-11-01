@@ -5,6 +5,7 @@ import pytest
 
 from demand_forecast.data.build_features import (
     add_calendar,
+    add_calendar_features,
     add_days_since_sale,
     add_lags,
     add_prices,
@@ -350,3 +351,30 @@ def test_days_since_sale_counts_within_each_series_through_missing_days() -> Non
         )
     )
     pd.testing.assert_frame_equal(add_days_since_sale(table), expected)
+
+
+def test_calendar_features_use_the_date_and_the_series_own_state() -> None:
+    table = pd.DataFrame(
+        {
+            "state_id": ["CA", "TX", "WI"],
+            "date": pd.to_datetime(["2011-01-29", "2011-02-06", "2012-12-03"]),
+            "snap_CA": [1, 1, 0],
+            "snap_TX": [0, 0, 0],
+            "snap_WI": [0, 1, 1],
+        }
+    ).astype(
+        {
+            "state_id": "category",
+            "snap_CA": "int8",
+            "snap_TX": "int8",
+            "snap_WI": "int8",
+        }
+    )
+
+    expected = table[["state_id", "date"]].assign(
+        day_of_week=pd.array([5, 6, 0], dtype="int8"),
+        day_of_month=pd.array([29, 6, 3], dtype="int8"),
+        month=pd.array([1, 2, 12], dtype="int8"),
+        snap=pd.array([1, 0, 1], dtype="int8"),
+    )
+    pd.testing.assert_frame_equal(add_calendar_features(table), expected)

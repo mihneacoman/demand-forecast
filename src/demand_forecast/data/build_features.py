@@ -127,6 +127,20 @@ def add_days_since_sale(table: pd.DataFrame) -> pd.DataFrame:
     return table.assign(days_since_sale=(rows - last_sale).astype("float32"))
 
 
+def add_calendar_features(table: pd.DataFrame) -> pd.DataFrame:
+    """Add the date parts, and replace the state SNAP flags with the series' own."""
+    states = table["state_id"].cat
+    snap_columns = [f"snap_{state}" for state in states.categories]
+    snap = table[snap_columns].to_numpy()[np.arange(len(table)), states.codes]
+    dates = table["date"].dt
+    return table.drop(columns=snap_columns).assign(
+        day_of_week=dates.day_of_week.astype("int8"),
+        day_of_month=dates.day.astype("int8"),
+        month=dates.month.astype("int8"),
+        snap=snap,
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     """Command-line entry point."""
     parser = argparse.ArgumentParser(
