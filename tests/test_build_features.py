@@ -5,6 +5,7 @@ import pytest
 
 from demand_forecast.data.build_features import (
     add_calendar,
+    add_lags,
     add_prices,
     add_sales_history,
     build_base_table,
@@ -298,3 +299,18 @@ def test_sales_history_leaves_the_target_unchanged() -> None:
     holiday_sales = make_holiday_sales()
     result = add_sales_history(holiday_sales)
     pd.testing.assert_series_equal(result["sales"], holiday_sales["sales"])
+
+
+def test_lags_stay_within_each_series_and_carry_missing_days() -> None:
+    table = pd.DataFrame(
+        {
+            "id": ["A", "A", "A", "A", "B", "B"],
+            "sales_history": [1, 2, None, 4, 5, 6],
+        }
+    ).astype({"id": "category", "sales_history": "float32"})
+
+    expected = table.assign(
+        sales_lag_1=pd.array([None, 1, 2, None, None, 5], dtype="float32"),
+        sales_lag_2=pd.array([None, None, 1, 2, None, None], dtype="float32"),
+    )
+    pd.testing.assert_frame_equal(add_lags(table, lags=[1, 2]), expected)

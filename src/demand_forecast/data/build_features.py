@@ -1,6 +1,7 @@
 """Build the modeling tables from the raw M5 files."""
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,9 @@ CALENDAR_COLUMNS = [
     "snap_WI",
 ]
 PRICE_KEYS = ["store_id", "item_id", "wm_yr_wk"]
+# Multiples of 7, from the forecast horizon up: shorter lags are unknown for the
+# later forecast days, and other lengths would compare different weekdays.
+LAGS = [28, 35, 42, 56]
 
 
 def to_long(sales: pd.DataFrame) -> pd.DataFrame:
@@ -91,6 +95,12 @@ def add_sales_history(base: pd.DataFrame) -> pd.DataFrame:
     is_christmas = (base["date"].dt.month == 12) & (base["date"].dt.day == 25)
     history = base["sales"].astype("float32").mask(is_christmas)
     return base.assign(sales_history=history)
+
+
+def add_lags(table: pd.DataFrame, lags: Sequence[int] = LAGS) -> pd.DataFrame:
+    """Add each series' sales from earlier days, by row within the series."""
+    history = table.groupby("id")["sales_history"]
+    return table.assign(**{f"sales_lag_{lag}": history.shift(lag) for lag in lags})
 
 
 def main(argv: list[str] | None = None) -> None:
