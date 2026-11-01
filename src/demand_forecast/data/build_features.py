@@ -28,6 +28,8 @@ PRICE_KEYS = ["store_id", "item_id", "wm_yr_wk"]
 LAGS = [28, 35, 42, 56]
 # Multiples of 7, so each weekday counts the same in every window.
 ROLLING_WINDOWS = [7, 28, 91]
+# The EDA finds shopping moves at most a few days ahead of an event.
+MAX_DAYS_TO_EVENT = 7
 
 
 def to_long(sales: pd.DataFrame) -> pd.DataFrame:
@@ -50,11 +52,14 @@ def to_long(sales: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def day_numbers(calendar: pd.DataFrame) -> pd.Series:
+    """Return the calendar's d_* labels as the day numbers of the long table."""
+    return calendar["d"].astype(str).str.removeprefix("d_").astype("int16")
+
+
 def add_calendar(long: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
     """Add the date, Walmart week, events and SNAP flags to each sales row."""
-    days = calendar[CALENDAR_COLUMNS].assign(
-        d=lambda df: df["d"].astype(str).str.removeprefix("d_").astype("int16")
-    )
+    days = calendar[CALENDAR_COLUMNS].assign(d=day_numbers(calendar))
     merged = long.merge(days, on="d", how="left", validate="many_to_one")
     assert merged["date"].notna().all(), "sales days missing from the calendar"
     return merged
@@ -139,6 +144,25 @@ def add_calendar_features(table: pd.DataFrame) -> pd.DataFrame:
         month=dates.month.astype("int8"),
         snap=snap,
     )
+
+
+def add_next_event(table: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
+    """Add the days until the next event, capped, and its name when within the cap."""
+    # Read from the full calendar: the table stops before events in the forecast days.
+    events = calendar["event_name_1"]
+    positions = pd.Series(np.arange(len(calendar)), index=calendar.index)
+    days_until = positions.where(events.notna()).bfill() - positions
+    is_near = days_until < MAX_DAYS_TO_EVENT
+    upcoming = pd.DataFrame(
+        {
+            "d": day_numbers(calendar),
+            "days_until_event": days_until.where(is_near, MAX_DAYS_TO_EVENT).astype(
+                "int8"
+            ),
+            "next_event_name": events.bfill().where(is_near),
+        }
+    )
+    return table.merge(upcoming, on="d", how="left", validate="many_to_one")
 
 
 def main(argv: list[str] | None = None) -> None:

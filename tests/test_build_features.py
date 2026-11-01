@@ -8,6 +8,7 @@ from demand_forecast.data.build_features import (
     add_calendar_features,
     add_days_since_sale,
     add_lags,
+    add_next_event,
     add_prices,
     add_rolling_stats,
     add_sales_history,
@@ -378,3 +379,21 @@ def test_calendar_features_use_the_date_and_the_series_own_state() -> None:
         snap=pd.array([1, 0, 1], dtype="int8"),
     )
     pd.testing.assert_frame_equal(add_calendar_features(table), expected)
+
+
+def test_next_event_reads_the_full_calendar_and_applies_the_cap() -> None:
+    # Day 12 has an event but no sales row, like events in the forecast days.
+    names: list[str | None] = [None] * 13
+    names[1], names[11] = "X", "Y"
+    calendar = pd.DataFrame(
+        {"d": [f"d_{day}" for day in range(1, 14)], "event_name_1": names}
+    ).astype({"d": "category", "event_name_1": "category"})
+    table = pd.DataFrame({"d": [1, 2, 3, 5, 6, 13]}).astype({"d": "int16"})
+
+    expected = table.assign(
+        days_until_event=pd.array([1, 0, 7, 7, 6, 7], dtype="int8"),
+        next_event_name=pd.Categorical(
+            ["X", "X", None, None, "Y", None], categories=["X", "Y"]
+        ),
+    )
+    pd.testing.assert_frame_equal(add_next_event(table, calendar), expected)
