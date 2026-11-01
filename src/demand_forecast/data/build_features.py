@@ -86,6 +86,13 @@ def build_base_table(raw: RawData) -> pd.DataFrame:
     return base
 
 
+def add_sales_history(base: pd.DataFrame) -> pd.DataFrame:
+    """Add the sales seen by history features, missing on Christmas closures."""
+    is_christmas = (base["date"].dt.month == 12) & (base["date"].dt.day == 25)
+    history = base["sales"].astype("float32").mask(is_christmas)
+    return base.assign(sales_history=history)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Command-line entry point."""
     parser = argparse.ArgumentParser(
