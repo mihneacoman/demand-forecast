@@ -6,6 +6,7 @@ import pytest
 from demand_forecast.data.build_features import (
     add_calendar,
     add_prices,
+    add_sales_history,
     build_base_table,
     check_base_table,
     drop_pre_launch,
@@ -103,6 +104,19 @@ def make_priced() -> pd.DataFrame:
 
 def make_raw() -> RawData:
     return RawData(calendar=make_calendar(), prices=make_prices(), sales=make_sales())
+
+
+def make_holiday_sales() -> pd.DataFrame:
+    # Covers Christmas in two years, plus the same day of another month.
+    holiday_sales = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2011-12-24", "2011-12-25", "2011-12-26", "2012-12-25", "2012-11-25"]
+            ),
+            "sales": [3, 0, 2, 1, 4],
+        }
+    )
+    return holiday_sales.astype({"sales": "int16"})
 
 
 def test_one_row_per_series_and_day() -> None:
@@ -267,3 +281,20 @@ def test_cli_writes_the_base_table(tmp_path: Path) -> None:
 
     expected = build_base_table(load_raw(tmp_path))
     pd.testing.assert_frame_equal(pd.read_parquet(output), expected)
+
+
+def test_sales_history_is_missing_only_on_christmas() -> None:
+    history = add_sales_history(make_holiday_sales())["sales_history"]
+    assert history.isna().tolist() == [False, True, False, True, False]
+
+
+def test_sales_history_copies_the_other_days() -> None:
+    history = add_sales_history(make_holiday_sales())["sales_history"]
+    assert history.dropna().tolist() == [3, 2, 4]
+    assert history.dtype == "float32"
+
+
+def test_sales_history_leaves_the_target_unchanged() -> None:
+    holiday_sales = make_holiday_sales()
+    result = add_sales_history(holiday_sales)
+    pd.testing.assert_series_equal(result["sales"], holiday_sales["sales"])
