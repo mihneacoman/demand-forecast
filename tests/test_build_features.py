@@ -5,6 +5,7 @@ import pytest
 
 from demand_forecast.data.build_features import (
     add_calendar,
+    add_days_since_sale,
     add_lags,
     add_prices,
     add_rolling_stats,
@@ -333,3 +334,19 @@ def test_rolling_stats_stay_within_each_series_and_skip_missing_days() -> None:
         ),
     )
     pd.testing.assert_frame_equal(add_rolling_stats(table, windows=[3]), expected)
+
+
+def test_days_since_sale_counts_within_each_series_through_missing_days() -> None:
+    table = pd.DataFrame(
+        {
+            "id": ["A", "A", "A", "A", "A", "A", "A", "B", "B", "B"],
+            "sales_lag_28": [None, 0, 2, 0, None, 0, 1, 0, 0, 3],
+        }
+    ).astype({"id": "category", "sales_lag_28": "float32"})
+
+    expected = table.assign(
+        days_since_sale=pd.array(
+            [None, None, 0, 1, 2, 3, 0, None, None, 0], dtype="float32"
+        )
+    )
+    pd.testing.assert_frame_equal(add_days_since_sale(table), expected)

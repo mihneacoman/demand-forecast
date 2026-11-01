@@ -120,6 +120,13 @@ def add_rolling_stats(
     return table.assign(**columns)
 
 
+def add_days_since_sale(table: pd.DataFrame) -> pd.DataFrame:
+    """Add the days from each series' last sale to lag 28, missing before any sale."""
+    rows = table.groupby("id").cumcount()
+    last_sale = rows.where(table["sales_lag_28"] > 0).groupby(table["id"]).ffill()
+    return table.assign(days_since_sale=(rows - last_sale).astype("float32"))
+
+
 def main(argv: list[str] | None = None) -> None:
     """Command-line entry point."""
     parser = argparse.ArgumentParser(
