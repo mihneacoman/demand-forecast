@@ -51,5 +51,6 @@ files are present and valid; use `--force` to re-download.
 
 ## Status
 
-🚧 Work in progress. Project infrastructure, the data download and the
-exploratory analysis are in place; the feature pipeline comes next.
+🚧 Work in progress. Project infrastructure, the data download, the
+exploratory analysis and the base sales table are in place; the model
+features come next.

@@ -1,13 +1,18 @@
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
 from demand_forecast.data.build_features import (
     add_calendar,
     add_prices,
+    build_base_table,
+    check_base_table,
     drop_pre_launch,
+    main,
     to_long,
 )
-from demand_forecast.data.load import SALES_ID_COLUMNS
+from demand_forecast.data.load import SALES_ID_COLUMNS, RawData, load_raw
 
 
 def make_sales() -> pd.DataFrame:
@@ -38,7 +43,7 @@ def make_calendar() -> pd.DataFrame:
             "date": pd.date_range("2011-01-29", periods=4),
             "wm_yr_wk": [11101, 11101, 11102, 11102],
             "event_name_1": [None, "SuperBowl", None, None],
-            "event_name_2": [None, None, None, None],
+            "event_name_2": [None, None, "Easter", None],
             "snap_CA": [0, 1, 0, 1],
             "snap_TX": [1, 0, 0, 1],
             "snap_WI": [0, 0, 1, 1],
@@ -94,6 +99,10 @@ def make_priced() -> pd.DataFrame:
     return priced.astype(
         {"id": "category", "d": "int16", "sales": "int16", "sell_price": "float32"}
     )
+
+
+def make_raw() -> RawData:
+    return RawData(calendar=make_calendar(), prices=make_prices(), sales=make_sales())
 
 
 def test_one_row_per_series_and_day() -> None:
@@ -213,3 +222,48 @@ def test_dropping_keeps_order_dtypes_and_a_clean_index() -> None:
     launched = drop_pre_launch(priced)
     expected = priced.drop(index=[4, 5]).reset_index(drop=True)
     pd.testing.assert_frame_equal(launched, expected)
+
+
+def test_base_table_has_launched_rows_with_their_context() -> None:
+    base = build_base_table(make_raw())
+    assert list(zip(base["item_id"], base["d"])) == [
+        ("A", 1),
+        ("A", 2),
+        ("A", 3),
+        ("B", 3),
+    ]
+    assert base["sell_price"].tolist() == [1.5, 1.5, 2.0, 3.0]
+    assert base["date"].iloc[-1] == pd.Timestamp("2011-01-31")
+
+
+def test_base_table_passes_its_checks() -> None:
+    check_base_table(make_priced().iloc[[0, 1, 2, 3, 6]], n_series=2)
+
+
+@pytest.mark.parametrize(
+    ("rows", "n_series", "message"),
+    [
+        ([0, 0, 6], 2, "duplicate series-days"),
+        ([0, 1, 2], 2, "series lost"),
+        ([0, 4, 6], 2, "series starting without a price"),
+        ([0, 6, 7], 2, "price gaps after launch"),
+    ],
+)
+def test_broken_base_table_fails_its_checks(
+    rows: list[int], n_series: int, message: str
+) -> None:
+    with pytest.raises(AssertionError, match=message):
+        check_base_table(make_priced().iloc[rows], n_series=n_series)
+
+
+def test_cli_writes_the_base_table(tmp_path: Path) -> None:
+    raw = make_raw()
+    raw.calendar.to_csv(tmp_path / "calendar.csv", index=False)
+    raw.prices.to_csv(tmp_path / "sell_prices.csv", index=False)
+    raw.sales.to_csv(tmp_path / "sales_train_evaluation.csv", index=False)
+    output = tmp_path / "processed" / "base_table.parquet"
+
+    main(["--raw-dir", str(tmp_path), "--output", str(output)])
+
+    expected = build_base_table(load_raw(tmp_path))
+    pd.testing.assert_frame_equal(pd.read_parquet(output), expected)
