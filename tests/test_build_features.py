@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from demand_forecast.data.build_features import add_calendar, to_long
+from demand_forecast.data.build_features import add_calendar, add_prices, to_long
 from demand_forecast.data.load import SALES_ID_COLUMNS
 
 
@@ -52,6 +52,30 @@ def make_calendar() -> pd.DataFrame:
     )
 
 
+def make_prices() -> pd.DataFrame:
+    # B has no price in week 11101; A in TX_1 is a different series from A in CA_1.
+    prices = pd.DataFrame(
+        {
+            "store_id": ["CA_1", "CA_1", "TX_1", "TX_1"],
+            "item_id": ["A", "A", "A", "B"],
+            "wm_yr_wk": [11101, 11102, 11101, 11102],
+            "sell_price": [1.5, 2.0, 9.99, 3.0],
+        }
+    )
+    return prices.astype(
+        {
+            "store_id": "category",
+            "item_id": "category",
+            "wm_yr_wk": "int16",
+            "sell_price": "float32",
+        }
+    )
+
+
+def make_long() -> pd.DataFrame:
+    return add_calendar(to_long(make_sales()), make_calendar())
+
+
 def test_one_row_per_series_and_day() -> None:
     long = to_long(make_sales())
     assert len(long) == 6
@@ -97,3 +121,47 @@ def test_sales_day_missing_from_calendar_fails() -> None:
     calendar = make_calendar().iloc[:2]
     with pytest.raises(AssertionError, match="missing from the calendar"):
         add_calendar(to_long(make_sales()), calendar)
+
+
+def test_prices_keep_rows_and_their_order() -> None:
+    long = make_long()
+    merged = add_prices(long, make_prices())
+    pd.testing.assert_frame_equal(merged[long.columns], long)
+
+
+def test_prices_land_on_the_right_series_and_week() -> None:
+    merged = add_prices(make_long(), make_prices())
+    prices = merged.set_index(["item_id", "d"])["sell_price"]
+    assert prices["A", 1] == 1.5
+    assert prices["A", 3] == 2.0
+    assert prices["B", 3] == 3.0
+
+
+def test_days_of_a_week_share_its_price() -> None:
+    merged = add_prices(make_long(), make_prices())
+    prices = merged.set_index(["item_id", "d"])["sell_price"]
+    assert prices["A", 1] == prices["A", 2]
+
+
+def test_week_without_a_price_stays_missing() -> None:
+    merged = add_prices(make_long(), make_prices())
+    prices = merged.set_index(["item_id", "d"])["sell_price"]
+    assert pd.isna(prices["B", 1])
+    assert pd.isna(prices["B", 2])
+
+
+def test_price_dtypes_stay_compact_when_categories_differ() -> None:
+    prices = make_prices()
+    prices["item_id"] = prices["item_id"].cat.set_categories(["Z", "B", "A"])
+    prices["store_id"] = prices["store_id"].cat.set_categories(["TX_1", "CA_1"])
+    merged = add_prices(make_long(), prices)
+    assert merged["item_id"].dtype == "category"
+    assert merged["store_id"].dtype == "category"
+    assert merged["sell_price"].dtype == "float32"
+
+
+def test_duplicate_price_fails() -> None:
+    prices = make_prices()
+    duplicated = pd.concat([prices, prices.iloc[[0]]], ignore_index=True)
+    with pytest.raises(pd.errors.MergeError):
+        add_prices(make_long(), duplicated)
