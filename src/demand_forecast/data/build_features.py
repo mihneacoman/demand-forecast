@@ -53,3 +53,11 @@ def add_prices(long: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFrame:
     # Categoricals merged with different category sets turn into object columns.
     aligned = prices.astype({column: long[column].dtype for column in PRICE_KEYS[:2]})
     return long.merge(aligned, on=PRICE_KEYS, how="left", validate="many_to_one")
+
+
+def drop_pre_launch(long: pd.DataFrame) -> pd.DataFrame:
+    """Keep each series from its first priced day, which marks its launch."""
+    # Rows must be in day order within a series: a row counts as launched once
+    # any row up to it has a price, so later gaps in the price are kept.
+    launched = long["sell_price"].notna().groupby(long["id"]).cummax()
+    return long[launched].reset_index(drop=True)

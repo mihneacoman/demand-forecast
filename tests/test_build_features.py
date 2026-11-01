@@ -1,7 +1,12 @@
 import pandas as pd
 import pytest
 
-from demand_forecast.data.build_features import add_calendar, add_prices, to_long
+from demand_forecast.data.build_features import (
+    add_calendar,
+    add_prices,
+    drop_pre_launch,
+    to_long,
+)
 from demand_forecast.data.load import SALES_ID_COLUMNS
 
 
@@ -74,6 +79,21 @@ def make_prices() -> pd.DataFrame:
 
 def make_long() -> pd.DataFrame:
     return add_calendar(to_long(make_sales()), make_calendar())
+
+
+def make_priced() -> pd.DataFrame:
+    # A is priced from day 1. B launches on day 3 and has a price gap on day 4.
+    priced = pd.DataFrame(
+        {
+            "id": ["A", "A", "A", "A", "B", "B", "B", "B", "B"],
+            "d": [1, 2, 3, 4, 1, 2, 3, 4, 5],
+            "sales": [1, 0, 2, 0, 0, 0, 0, 0, 3],
+            "sell_price": [1.5, 1.5, 1.5, 1.5, None, None, 2.0, None, 2.0],
+        }
+    )
+    return priced.astype(
+        {"id": "category", "d": "int16", "sales": "int16", "sell_price": "float32"}
+    )
 
 
 def test_one_row_per_series_and_day() -> None:
@@ -165,3 +185,31 @@ def test_duplicate_price_fails() -> None:
     duplicated = pd.concat([prices, prices.iloc[[0]]], ignore_index=True)
     with pytest.raises(pd.errors.MergeError):
         add_prices(make_long(), duplicated)
+
+
+def test_days_before_launch_are_dropped_per_series() -> None:
+    launched = drop_pre_launch(make_priced())
+    assert launched.loc[launched["id"] == "B", "d"].tolist() == [3, 4, 5]
+
+
+def test_series_priced_from_the_start_stays_whole() -> None:
+    launched = drop_pre_launch(make_priced())
+    assert launched.loc[launched["id"] == "A", "d"].tolist() == [1, 2, 3, 4]
+
+
+def test_zero_sales_after_launch_are_kept() -> None:
+    launched = drop_pre_launch(make_priced()).set_index(["id", "d"])["sales"]
+    assert launched["A", 2] == 0
+    assert launched["B", 3] == 0
+
+
+def test_price_gap_after_launch_is_kept() -> None:
+    launched = drop_pre_launch(make_priced()).set_index(["id", "d"])["sell_price"]
+    assert pd.isna(launched["B", 4])
+
+
+def test_dropping_keeps_order_dtypes_and_a_clean_index() -> None:
+    priced = make_priced()
+    launched = drop_pre_launch(priced)
+    expected = priced.drop(index=[4, 5]).reset_index(drop=True)
+    pd.testing.assert_frame_equal(launched, expected)
