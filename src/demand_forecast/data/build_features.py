@@ -11,6 +11,9 @@ from demand_forecast.data.download import RAW_DIR
 from demand_forecast.data.load import SALES_ID_COLUMNS, RawData, load_raw
 
 BASE_TABLE_PATH = Path("data/processed/base_table.parquet")
+# Bump when the feature set changes, so runs stay tied to the features they used.
+FEATURE_SET_VERSION = 1
+FEATURES_PATH = Path(f"data/processed/features_v{FEATURE_SET_VERSION}.parquet")
 
 CALENDAR_COLUMNS = [
     "d",
@@ -30,6 +33,7 @@ LAGS = [28, 35, 42, 56]
 ROLLING_WINDOWS = [7, 28, 91]
 # The EDA finds shopping moves at most a few days ahead of an event.
 MAX_DAYS_TO_EVENT = 7
+COMPLETE_FEATURES = ["days_until_event", "day_of_week", "day_of_month", "month", "snap"]
 
 
 def to_long(sales: pd.DataFrame) -> pd.DataFrame:
@@ -97,10 +101,14 @@ def build_base_table(raw: RawData) -> pd.DataFrame:
     return base
 
 
+def is_christmas(dates: pd.Series) -> pd.Series:
+    """Return which dates are Christmas Day, when the stores are closed."""
+    return (dates.dt.month == 12) & (dates.dt.day == 25)
+
+
 def add_sales_history(base: pd.DataFrame) -> pd.DataFrame:
     """Add the sales seen by history features, missing on Christmas closures."""
-    is_christmas = (base["date"].dt.month == 12) & (base["date"].dt.day == 25)
-    history = base["sales"].astype("float32").mask(is_christmas)
+    history = base["sales"].astype("float32").mask(is_christmas(base["date"]))
     return base.assign(sales_history=history)
 
 
@@ -165,10 +173,38 @@ def add_next_event(table: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
     return table.merge(upcoming, on="d", how="left", validate="many_to_one")
 
 
+def check_feature_table(features: pd.DataFrame, n_series: int) -> None:
+    """Assert the invariants of the feature table."""
+    assert not features.duplicated(["id", "d"]).any(), "duplicate series-days"
+    assert features["id"].nunique() == n_series, "series lost"
+    assert not is_christmas(features["date"]).any(), "Christmas rows left"
+    assert features[COMPLETE_FEATURES].notna().all(axis=None), "missing features"
+
+
+def build_feature_table(base: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
+    """Build the model features, each known 28 days before its row's day."""
+    # Christmas rows stay until here, so shifting by rows still means shifting by days.
+    table = add_days_since_sale(add_rolling_stats(add_lags(add_sales_history(base))))
+    table = add_next_event(add_calendar_features(table), calendar)
+    features = table[~is_christmas(table["date"])].drop(columns="sales_history")
+    features = features.reset_index(drop=True)
+    check_feature_table(features, n_series=base["id"].nunique())
+    return features
+
+
+def write_table(table: pd.DataFrame, path: Path, name: str) -> None:
+    """Write a table to Parquet and report its size."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    table.to_parquet(path, index=False)
+    print(f"{name}: {len(table):,} rows, {table['id'].nunique():,} series")
+    print(f"Memory: {table.memory_usage(deep=True).sum() / 1e9:.2f} GB")
+    print(f"Written to {path}")
+
+
 def main(argv: list[str] | None = None) -> None:
     """Command-line entry point."""
     parser = argparse.ArgumentParser(
-        description="Build the base sales table from the raw M5 files."
+        description="Build the base sales and feature tables from the raw M5 files."
     )
     parser.add_argument(
         "--raw-dir",
@@ -180,16 +216,21 @@ def main(argv: list[str] | None = None) -> None:
         "--output",
         type=Path,
         default=BASE_TABLE_PATH,
-        help=f"path of the Parquet file to write (default: {BASE_TABLE_PATH})",
+        help=f"path of the base table Parquet file (default: {BASE_TABLE_PATH})",
+    )
+    parser.add_argument(
+        "--features-output",
+        type=Path,
+        default=FEATURES_PATH,
+        help=f"path of the feature table Parquet file (default: {FEATURES_PATH})",
     )
     args = parser.parse_args(argv)
 
-    base = build_base_table(load_raw(args.raw_dir))
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    base.to_parquet(args.output, index=False)
-    print(f"Base table: {len(base):,} rows, {base['id'].nunique():,} series")
-    print(f"Memory: {base.memory_usage(deep=True).sum() / 1e9:.2f} GB")
-    print(f"Written to {args.output}")
+    raw = load_raw(args.raw_dir)
+    base = build_base_table(raw)
+    write_table(base, args.output, "Base table")
+    features = build_feature_table(base, raw.calendar)
+    write_table(features, args.features_output, "Feature table")
 
 
 if __name__ == "__main__":

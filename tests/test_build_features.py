@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -13,7 +15,9 @@ from demand_forecast.data.build_features import (
     add_rolling_stats,
     add_sales_history,
     build_base_table,
+    build_feature_table,
     check_base_table,
+    check_feature_table,
     drop_pre_launch,
     main,
     to_long,
@@ -105,6 +109,40 @@ def make_priced() -> pd.DataFrame:
     return priced.astype(
         {"id": "category", "d": "int16", "sales": "int16", "sell_price": "float32"}
     )
+
+
+def make_feature_inputs() -> tuple[pd.DataFrame, pd.DataFrame]:
+    # 100 days around Christmas 2011, for two series with varied sales.
+    dates = pd.date_range("2011-11-01", periods=100)
+    days = np.arange(1, 101)
+    sales = np.random.default_rng(0).poisson(2, 200)
+    base = pd.DataFrame(
+        {
+            "id": np.repeat(["A", "B"], 100),
+            "state_id": np.repeat(["CA", "TX"], 100),
+            "d": np.tile(days, 2),
+            "date": np.tile(dates, 2),
+            "sales": sales,
+            "snap_CA": 0,
+            "snap_TX": 1,
+        }
+    ).astype(
+        {
+            "id": "category",
+            "state_id": "category",
+            "d": "int16",
+            "sales": "int16",
+            "snap_CA": "int8",
+            "snap_TX": "int8",
+        }
+    )
+    calendar = pd.DataFrame(
+        {
+            "d": [f"d_{day}" for day in days],
+            "event_name_1": ["Christmas" if day == 55 else None for day in days],
+        }
+    ).astype({"d": "category", "event_name_1": "category"})
+    return base, calendar
 
 
 def make_raw() -> RawData:
@@ -275,17 +313,31 @@ def test_broken_base_table_fails_its_checks(
         check_base_table(make_priced().iloc[rows], n_series=n_series)
 
 
-def test_cli_writes_the_base_table(tmp_path: Path) -> None:
+def test_cli_writes_the_base_and_feature_tables(tmp_path: Path) -> None:
     raw = make_raw()
     raw.calendar.to_csv(tmp_path / "calendar.csv", index=False)
     raw.prices.to_csv(tmp_path / "sell_prices.csv", index=False)
     raw.sales.to_csv(tmp_path / "sales_train_evaluation.csv", index=False)
     output = tmp_path / "processed" / "base_table.parquet"
+    features_output = tmp_path / "processed" / "features.parquet"
 
-    main(["--raw-dir", str(tmp_path), "--output", str(output)])
+    main(
+        [
+            "--raw-dir",
+            str(tmp_path),
+            "--output",
+            str(output),
+            "--features-output",
+            str(features_output),
+        ]
+    )
 
-    expected = build_base_table(load_raw(tmp_path))
+    raw = load_raw(tmp_path)
+    expected = build_base_table(raw)
     pd.testing.assert_frame_equal(pd.read_parquet(output), expected)
+    pd.testing.assert_frame_equal(
+        pd.read_parquet(features_output), build_feature_table(expected, raw.calendar)
+    )
 
 
 def test_sales_history_is_missing_only_on_christmas() -> None:
@@ -397,3 +449,40 @@ def test_next_event_reads_the_full_calendar_and_applies_the_cap() -> None:
         ),
     )
     pd.testing.assert_frame_equal(add_next_event(table, calendar), expected)
+
+
+def test_features_ignore_sales_from_the_last_28_days() -> None:
+    base, calendar = make_feature_inputs()
+    first_changed_day = 40
+    changed = base.assign(
+        sales=base["sales"].where(base["d"] < first_changed_day, 50).astype("int16")
+    )
+
+    features = build_feature_table(base, calendar)
+    leaked = build_feature_table(changed, calendar)
+
+    known = features["d"] < first_changed_day + 28
+    pd.testing.assert_frame_equal(
+        features[known].drop(columns="sales"), leaked[known].drop(columns="sales")
+    )
+    assert not features[~known]["sales_lag_28"].equals(leaked[~known]["sales_lag_28"])
+
+
+@pytest.mark.parametrize(
+    ("corrupt", "message"),
+    [
+        (lambda df: pd.concat([df, df.iloc[[0]]]), "duplicate series-days"),
+        (lambda df: df[df["id"] == "A"], "series lost"),
+        (
+            lambda df: df.assign(date=pd.Timestamp("2011-12-25")),
+            "Christmas rows left",
+        ),
+        (lambda df: df.assign(snap=None), "missing features"),
+    ],
+)
+def test_broken_feature_table_fails_its_checks(
+    corrupt: Callable[[pd.DataFrame], pd.DataFrame], message: str
+) -> None:
+    features = build_feature_table(*make_feature_inputs())
+    with pytest.raises(AssertionError, match=message):
+        check_feature_table(corrupt(features), n_series=2)
