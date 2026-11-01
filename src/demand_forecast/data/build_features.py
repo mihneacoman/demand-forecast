@@ -12,7 +12,7 @@ from demand_forecast.data.load import SALES_ID_COLUMNS, RawData, load_raw
 
 BASE_TABLE_PATH = Path("data/processed/base_table.parquet")
 # Bump when the feature set changes, so runs stay tied to the features they used.
-FEATURE_SET_VERSION = 1
+FEATURE_SET_VERSION = 2
 FEATURES_PATH = Path(f"data/processed/features_v{FEATURE_SET_VERSION}.parquet")
 
 CALENDAR_COLUMNS = [
@@ -35,7 +35,14 @@ ROLLING_WINDOWS = [7, 28, 91]
 MAX_DAYS_TO_EVENT = 7
 # A year: long enough to outlast a discount, short enough to follow the usual price.
 PRICE_WINDOW_WEEKS = 52
-COMPLETE_FEATURES = ["days_until_event", "day_of_week", "day_of_month", "month", "snap"]
+COMPLETE_FEATURES = [
+    "days_until_event",
+    "day_of_week",
+    "day_of_month",
+    "month",
+    "snap",
+    "price_to_median",
+]
 
 
 def to_long(sales: pd.DataFrame) -> pd.DataFrame:
@@ -202,10 +209,10 @@ def check_feature_table(features: pd.DataFrame, n_series: int) -> None:
 
 
 def build_feature_table(base: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
-    """Build the model features, each known 28 days before its row's day."""
+    """Build the model features: sales from 28 days back, prices up to the day."""
     # Christmas rows stay until here, so shifting by rows still means shifting by days.
     table = add_days_since_sale(add_rolling_stats(add_lags(add_sales_history(base))))
-    table = add_next_event(add_calendar_features(table), calendar)
+    table = add_next_event(add_price_features(add_calendar_features(table)), calendar)
     features = table[~is_christmas(table["date"])].drop(columns="sales_history")
     features = features.reset_index(drop=True)
     check_feature_table(features, n_series=base["id"].nunique())
