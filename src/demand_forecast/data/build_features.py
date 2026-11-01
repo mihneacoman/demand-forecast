@@ -15,6 +15,7 @@ CALENDAR_COLUMNS = [
     "snap_TX",
     "snap_WI",
 ]
+PRICE_KEYS = ["store_id", "item_id", "wm_yr_wk"]
 
 
 def to_long(sales: pd.DataFrame) -> pd.DataFrame:
@@ -45,3 +46,10 @@ def add_calendar(long: pd.DataFrame, calendar: pd.DataFrame) -> pd.DataFrame:
     merged = long.merge(days, on="d", how="left", validate="many_to_one")
     assert merged["date"].notna().all(), "sales days missing from the calendar"
     return merged
+
+
+def add_prices(long: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFrame:
+    """Add the weekly price to each row, left missing while off the shelf."""
+    # Categoricals merged with different category sets turn into object columns.
+    aligned = prices.astype({column: long[column].dtype for column in PRICE_KEYS[:2]})
+    return long.merge(aligned, on=PRICE_KEYS, how="left", validate="many_to_one")
