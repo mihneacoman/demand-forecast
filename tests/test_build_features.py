@@ -116,14 +116,19 @@ def make_feature_inputs() -> tuple[pd.DataFrame, pd.DataFrame]:
     # 100 days around Christmas 2011, for two series with varied sales.
     dates = pd.date_range("2011-11-01", periods=100)
     days = np.arange(1, 101)
-    sales = np.random.default_rng(0).poisson(2, 200)
+    rng = np.random.default_rng(0)
+    sales = rng.poisson(2, 200)
+    weeks = 11101 + (days - 1) // 7
+    prices = rng.uniform(1, 5, 15)[(days - 1) // 7]
     base = pd.DataFrame(
         {
             "id": np.repeat(["A", "B"], 100),
             "state_id": np.repeat(["CA", "TX"], 100),
             "d": np.tile(days, 2),
             "date": np.tile(dates, 2),
+            "wm_yr_wk": np.tile(weeks, 2),
             "sales": sales,
+            "sell_price": np.tile(prices, 2),
             "snap_CA": 0,
             "snap_TX": 1,
         }
@@ -132,7 +137,9 @@ def make_feature_inputs() -> tuple[pd.DataFrame, pd.DataFrame]:
             "id": "category",
             "state_id": "category",
             "d": "int16",
+            "wm_yr_wk": "int16",
             "sales": "int16",
+            "sell_price": "float32",
             "snap_CA": "int8",
             "snap_TX": "int8",
         }
@@ -467,6 +474,25 @@ def test_features_ignore_sales_from_the_last_28_days() -> None:
         features[known].drop(columns="sales"), leaked[known].drop(columns="sales")
     )
     assert not features[~known]["sales_lag_28"].equals(leaked[~known]["sales_lag_28"])
+
+
+def test_price_features_ignore_later_weeks() -> None:
+    base, calendar = make_feature_inputs()
+    first_changed_week = 11106
+    is_changed = base["wm_yr_wk"] >= first_changed_week
+    changed = base.assign(sell_price=base["sell_price"].mask(is_changed, 99))
+
+    features = build_feature_table(base, calendar)
+    leaked = build_feature_table(changed, calendar)
+
+    known = features["wm_yr_wk"] < first_changed_week
+    pd.testing.assert_frame_equal(
+        features[known].drop(columns="sell_price"),
+        leaked[known].drop(columns="sell_price"),
+    )
+    assert not features[~known]["price_to_median"].equals(
+        leaked[~known]["price_to_median"]
+    )
 
 
 @pytest.mark.parametrize(
