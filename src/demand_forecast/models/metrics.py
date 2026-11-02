@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from demand_forecast.data.splits import Split, split_masks
+from demand_forecast.data.splits import HORIZON, Split, split_masks
 
 
 def series_scales(table: pd.DataFrame, split: Split) -> pd.DataFrame:
@@ -51,3 +51,41 @@ def series_errors(forecast: pd.DataFrame, scales: pd.DataFrame) -> pd.DataFrame:
             "rmsse": np.sqrt(scaled["squared"] / scaled["rmsse_scale"]),
         }
     )
+
+
+def series_weights(table: pd.DataFrame, split: Split, days: int = HORIZON) -> pd.Series:
+    """Return each series' share of the dollar sales in the last training days.
+
+    As in the M5, the weights cover the last `days` days before the forecast,
+    so they follow what each series sells now, not years ago.
+    """
+    recent = table["d"].between(split.train_end - days + 1, split.train_end)
+    rows = table.loc[recent, ["id", "sales", "sell_price"]]
+    dollars = (rows["sales"] * rows["sell_price"]).groupby(rows["id"], observed=True)
+    totals = dollars.sum()
+    return totals / totals.sum()
+
+
+def evaluate(
+    table: pd.DataFrame, split: Split, predictions: pd.Series
+) -> dict[str, float]:
+    """Return the metrics of a forecast of the split's validation rows.
+
+    `predictions` is indexed like the validation rows of `table`. MASE and RMSSE
+    are averaged over the series with a usable scale, and WRMSSE weights RMSSE by
+    dollar sales; `series_excluded` counts the series left out of all three.
+    """
+    _, valid = split_masks(table, split)
+    forecast = table.loc[valid, ["id", "sales"]]
+    assert predictions.index.equals(forecast.index), "predictions off the rows"
+    forecast = forecast.assign(prediction=predictions)
+
+    errors = series_errors(forecast, series_scales(table, split))
+    weights = series_weights(table, split).reindex(errors.index, fill_value=0.0)
+    return {
+        "wape": wape(forecast),
+        "mase": float(errors["mase"].mean()),
+        "rmsse": float(errors["rmsse"].mean()),
+        "wrmsse": float(np.average(errors["rmsse"], weights=weights)),
+        "series_excluded": forecast["id"].nunique() - len(errors),
+    }
