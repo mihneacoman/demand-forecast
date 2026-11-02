@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+import pandas as pd
+
 # The M5 forecast horizon: every validation and test window is this long.
 HORIZON = 28
 N_FOLDS = 3
@@ -32,3 +34,13 @@ def split_days(
     assert ends[0] - horizon > 0, "not enough days for the folds"
     splits = [Split(train_end=end - horizon, valid_end=end) for end in ends]
     return splits[:-1], splits[-1]
+
+
+def split_masks(table: pd.DataFrame, split: Split) -> tuple[pd.Series, pd.Series]:
+    """Return the training and validation rows of a split, as masks on `d`.
+
+    Masks instead of copies, since the full feature table takes GBs of memory.
+    """
+    train = table["d"] <= split.train_end
+    valid = table["d"].between(split.valid_start, split.valid_end)
+    return train, valid
