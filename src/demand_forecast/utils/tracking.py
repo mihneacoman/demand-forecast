@@ -16,6 +16,9 @@ import pandas as pd
 
 from demand_forecast.data.download import EXPECTED_SHA256
 
+# One experiment for every model, so all of them compare in one place.
+EXPERIMENT = "m5-forecasting"
+
 
 def git_output(*args: str) -> str:
     """Return the output of a git command, stripped."""
@@ -51,7 +54,9 @@ def run_context(feature_set_version: int) -> dict[str, str]:
 def tracked_run(
     run_name: str, feature_set_version: int, nested: bool = False
 ) -> Iterator[mlflow.ActiveRun]:
-    """Start an MLflow run tagged with its run context."""
+    """Start an MLflow run in the shared experiment, tagged with its run context."""
+    if not nested:
+        mlflow.set_experiment(EXPERIMENT)
     with mlflow.start_run(run_name=run_name, nested=nested) as run:
         mlflow.set_tags(run_context(feature_set_version))
         yield run
