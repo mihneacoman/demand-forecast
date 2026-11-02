@@ -22,7 +22,10 @@ def spread_over_rows(ids: pd.Series, values: pd.Series) -> pd.Series:
 def naive(table: pd.DataFrame, split: Split) -> pd.Series:
     """Forecast every validation day by the last training day."""
     train, valid = split_masks(table, split)
-    last = table.loc[train].groupby("id", observed=True)["sales"].last()
+    # Every launched series has a row each day but Christmas, so its last
+    # training day is in the last week; reading only that week saves copying.
+    last_week = train & (table["d"] > split.train_end - SEASON)
+    last = table.loc[last_week].groupby("id", observed=True)["sales"].last()
     return spread_over_rows(table.loc[valid, "id"], last)
 
 
