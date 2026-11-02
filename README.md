@@ -30,6 +30,31 @@ An [exploratory analysis](docs/eda.md) shaped the modeling choices:
 - **Holidays shift demand rather than add to it.** Sales drop on the day
   itself and rise one or two days before.
 
+## Baseline results
+
+Every model is scored on three 28-day walk-forward folds and on the last
+28 days as the test split. The primary metric is WRMSSE, the M5 competition
+metric, here at the level of each product and store: each series' RMSSE,
+weighted by its recent dollar sales.
+
+| Baseline | WRMSSE, folds (mean ± std) | WRMSSE, test | WAPE, test |
+|---|---|---|---|
+| Naive (last day) | 1.211 ± 0.032 | 1.167 | 0.952 |
+| Seasonal naive (same weekday, last week) | 1.131 ± 0.009 | 1.102 | 0.862 |
+| **Moving average (last 28 days)** | **0.888 ± 0.015** | **0.870** | **0.739** |
+
+- **The moving average is the bar to beat.** With most demand intermittent,
+  copying one day or one week copies noise; averaging four weeks smooths it.
+- **The folds predict the test split.** The ranking is the same on every
+  fold and on the test split, and test scores sit close to the fold means,
+  so the folds can be trusted for model selection.
+
+To reproduce, with the MLflow stack running (`docker compose up -d`):
+
+```bash
+uv run --env-file .env python -m demand_forecast.models.evaluate_baselines
+```
+
 ## Getting the data
 
 The raw M5 files are downloaded from Kaggle and verified by SHA256.
@@ -55,4 +80,6 @@ files are present and valid; use `--force` to re-download.
 exploratory analysis and the feature pipeline are in place: the feature
 table (sales lags and rolling stats, calendar, SNAP and price features) is
 built from the CLI, and split by time into walk-forward folds and a test
-split on the last 28 days. Baseline models, tracked in MLflow, come next.
+split on the last 28 days. The baselines are scored and tracked in MLflow
+(see [Baseline results](#baseline-results)); classical baselines (Croston,
+ETS, ARIMA) and then a global LightGBM model come next.
