@@ -1,6 +1,7 @@
 """Score the baselines on the walk-forward folds and the test split, in MLflow."""
 
 import argparse
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -21,23 +22,28 @@ BASELINES: dict[str, Callable[[pd.DataFrame, Split], pd.Series]] = {
 }
 # Only what the baselines and the metrics read, not the whole feature table.
 COLUMNS = ["id", "d", "sales", "sell_price"]
-FOLD_METRICS = ["wape", "mase", "rmsse", "wrmsse"]
+FOLD_METRICS = ["wape", "mase", "rmsse", "wrmsse", "seconds"]
 
 
 def score_baselines(table: pd.DataFrame) -> pd.DataFrame:
-    """Return the metrics of every baseline on every fold and on the test split."""
+    """Return the metrics of every baseline on every fold and on the test split.
+
+    `seconds` times the forecast alone: loading the data and scoring it are the
+    same for every baseline.
+    """
     folds, test = split_days(int(table["d"].max()))
     splits = {f"fold_{i}": fold for i, fold in enumerate(folds, start=1)}
     splits["test"] = test
-    rows = [
-        {
-            "baseline": name,
-            "split": split_name,
-            **evaluate(table, split, forecast(table, split)),
-        }
-        for name, forecast in BASELINES.items()
-        for split_name, split in splits.items()
-    ]
+    rows = []
+    for name, forecast in BASELINES.items():
+        for split_name, split in splits.items():
+            start = time.perf_counter()
+            predictions = forecast(table, split)
+            seconds = time.perf_counter() - start
+            metrics = evaluate(table, split, predictions)
+            rows.append(
+                {"baseline": name, "split": split_name, **metrics, "seconds": seconds}
+            )
     return pd.DataFrame(rows)
 
 

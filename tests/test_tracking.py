@@ -25,6 +25,8 @@ def test_runs_are_tagged_with_their_context(
         assert tags["git_dirty"] in {"true", "false"}
         assert tags["dataset_version"] == dataset_version()
         assert tags["feature_set_version"] == "2"
-        assert {"python_version", "pandas_version", "mlflow_version"} <= set(tags)
+        assert {"platform", "cpu_count", "python_version", "mlflow_version"} <= set(
+            tags
+        )
     child_tags = client.get_run(child.info.run_id).data.tags
     assert child_tags["mlflow.parentRunId"] == parent.info.run_id
