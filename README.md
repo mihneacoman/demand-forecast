@@ -52,5 +52,7 @@ files are present and valid; use `--force` to re-download.
 ## Status
 
 🚧 Work in progress. Project infrastructure, the data download, the
-exploratory analysis and the base sales table are in place; the model
-features come next.
+exploratory analysis and the feature pipeline are in place: the feature
+table (sales lags and rolling stats, calendar, SNAP and price features) is
+built from the CLI, and split by time into walk-forward folds and a test
+split on the last 28 days. Baseline models, tracked in MLflow, come next.
