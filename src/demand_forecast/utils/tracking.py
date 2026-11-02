@@ -5,6 +5,7 @@ run with `uv run --env-file .env`.
 """
 
 import hashlib
+import os
 import platform
 import subprocess
 from collections.abc import Iterator
@@ -43,6 +44,9 @@ def run_context(feature_set_version: int) -> dict[str, str]:
         "git_dirty": str(bool(git_output("status", "--porcelain"))).lower(),
         "dataset_version": dataset_version(),
         "feature_set_version": str(feature_set_version),
+        # Run times only compare on the same machine.
+        "platform": platform.platform(),
+        "cpu_count": str(os.cpu_count()),
         "python_version": platform.python_version(),
         "numpy_version": np.__version__,
         "pandas_version": pd.__version__,

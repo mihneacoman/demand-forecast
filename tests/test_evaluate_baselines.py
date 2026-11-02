@@ -35,9 +35,14 @@ def test_cli_logs_every_baseline_under_one_parent_run(
     assert sorted(run.info.run_name for run in children) == sorted(BASELINES)
     for child in children:
         assert child.data.tags["mlflow.parentRunId"] == parent.info.run_id
-        assert {"wrmsse", "wrmsse_fold_std", "fold_3_wrmsse", "test_wrmsse"} <= set(
-            child.data.metrics
-        )
+        assert {
+            "wrmsse",
+            "wrmsse_fold_std",
+            "fold_3_wrmsse",
+            "test_wrmsse",
+            "seconds",
+            "test_seconds",
+        } <= set(child.data.metrics)
     artifacts = mlflow.MlflowClient().list_artifacts(parent.info.run_id)
     assert {artifact.path for artifact in artifacts} == {
         "baseline_scores.csv",
